@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Quan Trắc Koa 1</title>
+    <style>
+        /* CSS Styling for the Dashboard */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f7f9;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        .header-info {
+            background-color: #e6f3ff;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 25px;
+            border-left: 5px solid #007bff;
+        }
+
+        .header-info h2 {
+            color: #007bff;
+            margin-top: 0;
+            font-size: 1.5em;
+        }
+
+        .header-info p {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        /* Metric Cards Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .metric-card {
+            background-color: #f8f8f8;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #eee;
+            position: relative;
+            transition: transform 0.2s;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .metric-card h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .metric-card .value {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #28a745; /* Màu xanh lá cho giá trị bình thường */
+            margin: 10px 0;
+        }
+
+        .metric-card .unit {
+            font-size: 0.6em;
+            font-weight: normal;
+            color: #555;
+        }
+
+        .metric-card .limit {
+            font-size: 0.85em;
+            color: #777;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+            margin-top: 15px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #28a745; /* Mặc định là OK */
+            border-radius: 50%;
+        }
+
+        /* Fallback/Error Styling */
+        #loading-state {
+            text-align: center;
+            padding: 50px;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header style="padding: 0 0 20px 0; border-bottom: 1px solid #eee;">
+            <div style="font-size: 1.2em; font-weight: bold;">KOA CEMS</div>
+        </header>
+        
+        <div class="header-info">
+            <h2><span role="img" aria-label="factory">🏭</span> Nhà Máy Giấy KOA 1 - KCN Chuyên Sâu Phú Mỹ 3</h2>
+            <p>Địa chỉ: Phước Hoà, TP HCM, Việt Nam | Thời gian lấy mẫu: <strong id="time-display">Đang tải...</strong></p>
+        </div>
+
+        <div id="metrics-container" class="metrics-grid">
+            <div id="loading-state">Đang kết nối API và lấy dữ liệu...</div>
+        </div>
+    </div>
+
+    <script>
+        const apiUrl = "http://api.dulieuquantrac.com:9005/?day=30&key=YTozOntzOjI6ImlkIjtpOjQzMDM7czozOiJ0YmwiO3M6Mjc6InRibF90dmFfcXVhbnRyYWNfa2NuZGF1Z2lheSI7czozOiJrZXkiO3M6MzI6ImFmYmE5NWZhNTJjMzg5MjA0NDI0ZGE5YWViOGEzM2UzIjt9";
+        const container = document.getElementById('metrics-container');
+        const timeDisplay = document.getElementById('time-display');
+
+        // Định nghĩa ánh xạ: key trong API -> Tên hiển thị, Đơn vị, Giới hạn
+        // Bạn cần điều chỉnh các 'key' này (ví dụ: 'CO', 'NOx', ...) dựa trên dữ liệu thực tế API trả về
+        const metricMap = [
+            { key: 'CO', title: 'CO (CO)', limit: 'Giới hạn: 0 → 720', unit: 'mg/Nm3' },
+            { key: 'Luu_Luong', title: 'Lưu Lượng (Lưu Lượng)', limit: 'Giới hạn: ≥ 0', unit: 'm3/h' },
+            { key: 'NOx', title: 'NOx (NOx)', limit: 'Giới hạn: 0 → 200', unit: 'mg/Nm3' },
+            { key: 'O2', title: 'O2 (O2)', limit: 'Giới hạn: 0 → 30', unit: '%' },
+            { key: 'Bui', title: 'Bụi (Bụi)', limit: 'Giới hạn: ≤ 40', unit: 'mg/Nm3' },
+            { key: 'Ap_Suat', title: 'Áp Suất (Áp Suất)', limit: 'Giới hạn: -10 → 120', unit: 'kPa' },
+            { key: 'SO2', title: 'SO2 (SO2)', limit: 'Giới hạn: 0 → 360', unit: 'mg/Nm3' },
+            { key: 'Nhiet_Do', title: 'Nhiệt Độ (Nhiệt Độ)', limit: 'Giới hạn: 0 → 500', unit: 'oC' }
+            // Thêm các thông số khác nếu có
+        ];
+
+        /**
+         * Hàm tạo thẻ Card hiển thị một thông số
+         * @param {Object} metric - Định nghĩa thông số từ metricMap
+         * @param {number} value - Giá trị thực tế từ API
+         * @returns {string} HTML string của thẻ
+         */
+        function createMetricCard(metric, value) {
+            // Giả định giá trị luôn OK (màu xanh). Bạn có thể thêm logic kiểm tra giới hạn ở đây.
+            const statusColor = '#28a745'; 
+            const formattedValue = value ? value.toLocaleString('en-US', { maximumFractionDigits: 2 }) : 'N/A';
+
+            return `
+                <div class="metric-card">
+                    <h3>
+                        <span>${metric.title}</span>
+                        <span class="status-dot" style="background-color: ${statusColor};"></span>
+                    </h3>
+                    <div class="value">
+                        ${formattedValue} 
+                        <span class="unit">${metric.unit}</span>
+                    </div>
+                    <p class="limit">${metric.limit}</p>
+                </div>
+            `;
+        }
+
+
+        /**
+         * Hàm chính để lấy dữ liệu và hiển thị lên giao diện
+         */
+        async function fetchAndRenderData() {
+            try {
+                const response = await fetch(apiUrl);
+
+                if (!response.ok) {
+                    throw new Error(`Lỗi HTTP: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Lấy bản ghi mới nhất (thường là phần tử đầu tiên của mảng)
+                const latestData = data && data.length > 0 ? data[0] : null;
+
+                if (!latestData) {
+                    container.innerHTML = `<div id="error-state">Không tìm thấy dữ liệu quan trắc mới nhất!</div>`;
+                    timeDisplay.textContent = 'Không có dữ liệu';
+                    return;
+                }
+                
+                // 1. Cập nhật thời gian lấy mẫu
+                // Giả định trường thời gian là 'time' trong API
+                timeDisplay.textContent = latestData.time || 'Không xác định';
+
+                // 2. Render các thẻ thông số
+                let htmlContent = '';
+                
+                metricMap.forEach(metric => {
+                    // Lấy giá trị từ dữ liệu API dựa trên key đã định nghĩa
+                    const value = latestData[metric.key]; 
+                    
+                    if (value !== undefined) {
+                         htmlContent += createMetricCard(metric, value);
+                    }
+                });
+
+                container.innerHTML = htmlContent;
+
+            } catch (error) {
+                console.error("Lỗi khi lấy dữ liệu API:", error);
+                // Hiển thị thông báo lỗi thân thiện với người dùng
+                container.innerHTML = `<div id="error-state" style="color: red; text-align: center; padding: 30px;">
+                    Lỗi kết nối hoặc lấy dữ liệu! Vui lòng kiểm tra console hoặc lỗi CORS.
+                </div>`;
+                timeDisplay.textContent = 'Lỗi kết nối';
+            }
+        }
+
+        // Chạy hàm khi trang được tải xong
+        document.addEventListener('DOMContentLoaded', fetchAndRenderData);
+    </script>
+</body>
+</html>
